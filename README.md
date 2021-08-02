@@ -53,7 +53,9 @@ This is just a small and simple project using JSoup to check if SteamURL's are a
 This project will require <b>Java 16</b>.
 
 ## How to use
+
 Step 1: Place a txt file in the directory of the jar
+<br>
 Step 2: Run `java -jar SteamURLChecker-jar-with-dependencies.jar`
 
 
