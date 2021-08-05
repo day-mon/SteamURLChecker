@@ -1,5 +1,7 @@
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -12,13 +14,16 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class App
 {
       private static final int DEFAULT_CLUSTER_SIZE = 50;
+      private static final Logger LOGGER = LoggerFactory.getLogger("SteamURLChecker");
 
       public static void main(String[] args) throws IOException
       {
@@ -36,7 +41,8 @@ public class App
                           }
                           catch (IOException e)
                           {
-                                e.printStackTrace();
+                                LOGGER.info("Error while checking file size");
+                                System.exit(1);
                           }
                           return false;
                     })
@@ -44,7 +50,7 @@ public class App
 
             if (files.isEmpty())
             {
-                  System.out.println("You have no non-empty .txt files in the application directory");
+                  LOGGER.error("You have no non-empty .txt files in your application directory");
                   System.exit(1);
             }
 
@@ -57,7 +63,7 @@ public class App
 
             for (int i = 0; i < files.size(); i++)
             {
-                  System.out.println(i + 1 + " " + files.get(i));
+                  System.out.printf("%d %s\n", (i+1), files.get(i));
             }
 
             var validAnswer = false;
@@ -81,6 +87,7 @@ public class App
       {
             var list = readFile(path)
                     .stream()
+                    .filter(string -> !string.isBlank())
                     .map(string -> string.replaceAll("\\s+", "_"))
                     .distinct()
                     .collect(Collectors.toList());
@@ -88,12 +95,12 @@ public class App
 
             if (list.size() >= 100)
             {
-                  System.out.println("Just so you are aware, you may be rate limited due to the amount of ids you are checking");
+                  LOGGER.warn("Just so you are aware, you may be rate limited due to the amount of ids you are checking");
                   makeThreads(list);
                   return;
             }
 
-            System.out.printf("Found %d unique ids. Checking now. \n", list.size());
+            LOGGER.info("Found {} unique ids. Checking now. \n", list.size());
             doSearch(list);
       }
 
@@ -111,8 +118,7 @@ public class App
             }
             catch (Exception e)
             {
-                  System.err.println("There was an error while reading your file");
-                  e.printStackTrace();
+                  LOGGER.error("There was an error while reading your file", e);
             }
             return list;
       }
@@ -120,7 +126,6 @@ public class App
       public static void doSearch(List<String> list)
       {
             var defaultUrl = "https://steamcommunity.com/id/";
-            List<String> missedIds = new ArrayList<>();
 
             for (var item : list)
             {
@@ -132,20 +137,15 @@ public class App
                   }
                   catch (IOException e)
                   {
-                        e.printStackTrace();
-                        missedIds.add(item);
+                        LOGGER.warn("{} was skipped", item);
                         return;
                   }
 
                   var errorElement = document.getElementsByClass("error_ctn").text();
 
+                  LOGGER.info("{} is{} taken {}", item, (errorElement.length() == 0 ? "" : " not"), defaultUrl + item);
+            }
 
-                  System.out.printf("%s is%s taken %s\n", item, (errorElement.length() == 0 ? "" : " not"), defaultUrl + item);
-            }
-            if (!missedIds.isEmpty())
-            {
-                  System.out.println("There was " + missedIds + " ids that were not checked \n " + list);
-            }
       }
 
 
@@ -155,13 +155,14 @@ public class App
             final var threadCount = (int) (Math.ceil(listSize / DEFAULT_CLUSTER_SIZE));
             final ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
 
-            System.out.printf("Found %d unique ids. Checking now with %d threads. \n", listSize, threadCount);
+            LOGGER.info("Found {} unique ids. Checking now with {} threads. \n", listSize, threadCount);
 
             for (var i = 0; i < list.size() - 1; i += DEFAULT_CLUSTER_SIZE)
             {
                   if (i + DEFAULT_CLUSTER_SIZE > listSize)
                   {
                         var subList = list.subList(i, listSize);
+
                         executorService.submit(() -> doSearch(subList));
                         break;
                   }
@@ -169,6 +170,5 @@ public class App
 
                   executorService.submit(() -> doSearch(subList));
             }
-
       }
 }
